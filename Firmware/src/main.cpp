@@ -2,47 +2,47 @@
 #include "deca_device_api.h"
 #include "deca_regs.h"
  
-// --- BASCULE DU RÔLE DU RADAR ---
+// --- RADAR ROLE TOGGLE ---
 bool is_tx_module = false; 
 #define PIN_SW2 2          
 
 extern "C" void port_init(void);
 
-// --- CONFIGURATION RADIO UWB (Spécial Radar) ---
+// --- UWB RADIO CONFIGURATION (Radar Special) ---
 static dwt_config_t config = {
-    5,               // chan           : Canal radio (Canal 5 = 6.5 GHz)
+    5,               // chan           : Radio channel (Channel 5 = 6.5 GHz)
     DWT_PRF_64M,     // prf            : Pulse Repetition Frequency (64 MHz)
-    DWT_PLEN_128,    // txPreambLength : Longueur du préambule (128 symboles)
+    DWT_PLEN_128,    // txPreambLength : Preamble length (128 symbols)
     DWT_PAC8,        // rxPAC          : Preamble Acquisition Chunk 
-    9,               // txCode         : Code de préambule TX 
-    9,               // rxCode         : Code de préambule RX 
+    9,               // txCode         : TX preamble code 
+    9,               // rxCode         : RX preamble code 
     0,               // nsSFD          : Non-standard SFD 
-    DWT_BR_6M8,      // dataRate       : Débit de données (6.8 Mbps) 
-    DWT_PHRMODE_STD, // phrMode        : Mode d'en-tête PHY 
+    DWT_BR_6M8,      // dataRate       : Data rate (6.8 Mbps) 
+    DWT_PHRMODE_STD, // phrMode        : PHY header mode 
     (129 + 8 - 8)    // sfdTO          : SFD Timeout 
 };
 
 void setup() {
     Serial.begin(460800); 
     
-    // 1. LE DÉFIBRILLATEUR (WAKE-UP DEEP SLEEP) 
+    // 1. DEEP SLEEP WAKE-UP
     pinMode(17, OUTPUT);
     digitalWrite(17, LOW);  
     delay(5);               
     digitalWrite(17, HIGH); 
     delay(10);              
     
-    // 2. LE RESET MATÉRIEL (Pin 24)
+    // 2. HARDWARE RESET (Pin 24)
     pinMode(24, OUTPUT);
     digitalWrite(24, LOW);  
     delay(10);
     pinMode(24, INPUT);     
     delay(50);              
 
-    // 3. OUVERTURE DU BUS SPI 
+    // 3. SPI BUS OPENING 
     port_init();
     
-    // 🚨 4. PATCH FORCE : BRIDAGE DE LA VITESSE SPI À 1 MHz 🚨
+    // 4. FORCED PATCH: CAPPING SPI SPEED TO 1 MHz
     #ifdef NRF_SPI2
         NRF_SPI2->FREQUENCY = 0x01000000;
         NRF_SPI2->CONFIG = 0;
@@ -60,12 +60,12 @@ void setup() {
         NRF_SPIM1->CONFIG = 0;
     #endif
     
-    // 5. Initialisation logicielle DW1000
+    // 5. DW1000 software initialization
     dwt_softreset();
     
     if (dwt_initialise(DWT_LOADUCODE) != DWT_SUCCESS) {
         while (1) {
-            Serial.println("❌ ERREUR CRITIQUE : La puce DW1000 ne repond pas sur le bus SPI !");
+            Serial.println("CRITICAL ERROR: The DW1000 chip is not responding on the SPI bus");
             delay(1000);
         }
     }
@@ -73,7 +73,7 @@ void setup() {
     dwt_configure(&config);
     dwt_setrxantennadelay(16436);
 
-    // --- LECTURE DU BOUTON SW2 ---
+    // --- READING SW2 BUTTON ---
     NRF_P0->PIN_CNF[2] = (3 << 2); 
     delay(10); 
 
@@ -83,77 +83,75 @@ void setup() {
         is_tx_module = false;
     }
 
-    // --- ALLUMAGE DES LEDS ---
+    // --- TURNING ON LEDS ---
     NRF_P0->DIRSET = (1 << 14) | (1 << 30);
     NRF_P0->OUTSET = (1 << 14) | (1 << 30);
 
     if (is_tx_module) {
         Serial.println("Initialising the TX (20 Hz transmitter)...");
-        NRF_P0->OUTCLR = (1 << 14); // Allume la LED Verte (D9)
+        NRF_P0->OUTCLR = (1 << 14); // Turn on Green LED (D9)
     } else {
         Serial.println("Initialising the RX (Radar Recieve)...");
-        NRF_P0->OUTCLR = (1 << 30); // Allume la LED Bleue (D10)
+        NRF_P0->OUTCLR = (1 << 30); // Turn on Blue LED (D10)
     }
 }
 
 void loop() {
     if (is_tx_module) {
-        // --- LOGIQUE TX ---
+        // --- TX LOGIC ---
         uint8_t tx_msg[] = {'R', 'A', 'D', 'A', 'R', 0, 0}; 
 
         dwt_writetxdata(sizeof(tx_msg), tx_msg, 0);
         dwt_writetxfctrl(sizeof(tx_msg), 0, 0);
         dwt_starttx(DWT_START_TX_IMMEDIATE);
 
-        // 🚨 CORRECTION VITAL : Attente et nettoyage du drapeau pour éviter le blocage du TX 🚨
         while (!(dwt_read32bitreg(SYS_STATUS_ID) & SYS_STATUS_TXFRS)) {
-            // Attente très courte de l'envoi physique
+            // Very short wait for the physical transmission
         }
-        dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS); // Débloque le prochain tir
+        dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS); // Unlocks the next shot
 
-        // Attente de 50 millisecondes (20 Hz)
+        // Wait for 50 milliseconds (20 Hz)
         delay(50); 
 
     } else {
-        // --- LOGIQUE RX ---
+        // --- RX LOGIC ---
         dwt_rxenable(DWT_START_RX_IMMEDIATE);
 
         uint32_t status_reg = 0;
         while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG | SYS_STATUS_ALL_RX_ERR))) {
-            // On attend l'onde...
+            // Waiting for the wave...
         }
 
         if (status_reg & SYS_STATUS_RXFCG) {
             
-            // 1. On lit l'index exact où l'onde a frappé (First Path)
+            // 1. Read the exact index where the wave hit (First Path)
             uint16_t fp_index = dwt_read16bitoffsetreg(RX_TIME_ID, RX_TIME_FP_INDEX_OFFSET);
-            uint16_t fp_int = fp_index >> 6; // On convertit l'index brut en entier
+            uint16_t fp_int = fp_index >> 6; // Convert raw index to integer
 
-            // 2. On recule de 10 échantillons pour voir le silence juste AVANT l'impact
-            int16_t index_debut = fp_int - 10;
-            if (index_debut < 0) {
-                index_debut = 0; 
+            // 2. Step back 10 samples to see the silence right BEFORE the impact
+            int16_t start_index = fp_int - 10;
+            if (start_index < 0) {
+                start_index = 0; 
             }
 
-            // 3. On convertit cet index en octets (1 échantillon = 4 octets)
-            uint16_t offset_octets = index_debut * 4;
+            // 3. Convert this index to bytes (1 sample = 4 bytes)
+            uint16_t byte_offset = start_index * 4;
 
-            // 4. Sécurité anti-crash : on empêche de lire en dehors de la mémoire (max 4064)
-            if (offset_octets > 3000) {
-                offset_octets = 3000; 
+            // 4. Anti-crash security: prevent reading out of memory bounds (max 4064)
+            if (byte_offset > 3000) {
+                byte_offset = 3000; 
             }
 
-            // 5. On nettoie le drapeau
+            // 5. Clear the flag
             dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG);
 
-            // 6. Lecture de l'accumulateur avec le BON OFFSET
+            // 6. Read the accumulator with the CORRECT OFFSET
             uint16_t cir_bytes = 1024; 
             uint8_t cir_buffer[cir_bytes + 1]; 
 
-            // 🚨 ON MET NOTRE OFFSET ICI AU LIEU DE ZERO 🚨
-            dwt_readaccdata(cir_buffer, cir_bytes + 1, offset_octets);
+            dwt_readaccdata(cir_buffer, cir_bytes + 1, byte_offset);
 
-            // Envoi au Mac
+            // Send to Mac
             uint8_t header[] = {0xDE, 0xCA, 0xAD, 0xDE}; 
             Serial.write(header, 4);
             Serial.write(&cir_buffer[1], cir_bytes);
