@@ -38,7 +38,7 @@ The software processing chain was successfully validated on the [MobiVital](http
 │   └── main_gui.py           # Real-time visualization interface
 ├── Hardware/                 # 3D models (STL/Fusion 360) for the RF shield
 └── Docs/                     # Additional documentation and test data
-
+```
 ##  References
 This project and its signal processing methodology are based on the following scientific literature and datasets:
 
