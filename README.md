@@ -7,7 +7,7 @@
 ## 📋 Overview
 This repository contains the hardware configuration, firmware, and signal processing software for a proof-of-concept UWB radar system. The objective was to design a contactless Ultra-Wideband (UWB) radar system to detect vital signs for future integration into a mobile robot. This research relies on repurposing low-cost DWM1001-DEV modules into a bistatic radar to extract and analyze the Channel Impulse Response (CIR).
 
-This project was conducted as part of a 4th-year engineering internship at the **HCR Laboratory (Robotics and Embedded Systems)** at **Ostfalia University of Applied Sciences, Germany**.
+This project was conducted as part of a 4th-year engineering internship at the **HCR Laboratory (Robotics and Embedded Systems)** at **[Ostfalia University of Applied Sciences, Germany](https://www.ostfalia.de)**.
 
 ## 📚 Project Documentation (Wiki)
 Comprehensive documentation covering the theoretical background, hardware setup, and software architecture is available in the **[Project Wiki](https://github.com/wcm3415a/uwb-vital-signs-radar/wiki)**:
