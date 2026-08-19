@@ -5,27 +5,27 @@
 ![Hardware](https://img.shields.io/badge/Hardware-DWM1001--DEV-orange)
 
 ## 📋 Overview
-This repository contains the hardware configuration, firmware, and signal processing software for a proof-of-concept UWB radar system. The objective was to design a contactless Ultra-Wideband (UWB) radar system to detect vital signs for future integration into a mobile robot[cite: 1]. This research relies on repurposing low-cost DWM1001-DEV modules into a bistatic radar to extract and analyze the Channel Impulse Response (CIR)[cite: 1].
+This repository contains the hardware configuration, firmware, and signal processing software for a proof-of-concept UWB radar system. The objective was to design a contactless Ultra-Wideband (UWB) radar system to detect vital signs for future integration into a mobile robot. This research relies on repurposing low-cost DWM1001-DEV modules into a bistatic radar to extract and analyze the Channel Impulse Response (CIR).
 
-This project was conducted as part of a 4th-year engineering internship at the **HCR Laboratory (Robotics and Embedded Systems)** at **Ostfalia University of Applied Sciences, Germany**[cite: 1].
+This project was conducted as part of a 4th-year engineering internship at the **HCR Laboratory (Robotics and Embedded Systems)** at **Ostfalia University of Applied Sciences, Germany**.
 
 ## 📚 Project Documentation (Wiki)
-Comprehensive documentation covering the theoretical background, hardware setup, and software architecture is available in the **[Project Wiki](https://github.com/TonPseudo/uwb-vital-signs-radar/wiki)**:
-* 📖 **[Hardware Architecture and Test Bench](https://github.com/TonPseudo/uwb-vital-signs-radar/wiki/Hardware-and-Test-Bench):** Details on the bistatic configuration and the 3D-printed electromagnetic shield.
-* 📖 **[Firmware and SPI Communication](https://github.com/TonPseudo/uwb-vital-signs-radar/wiki/Firmware-and-SPI):** C++ implementation, register modifications, and SPI throttling.
-* 📖 **[DSP Theory and VMD Algorithm](https://github.com/TonPseudo/uwb-vital-signs-radar/wiki/Signal-Processing):** Mathematical foundations of phase extraction and Variational Mode Decomposition.
-* 📖 **[Real-Time Python Application](https://github.com/TonPseudo/uwb-vital-signs-radar/wiki/Python-Application):** Multithreaded architecture for high-speed serial parsing and real-time visualization.
+Comprehensive documentation covering the theoretical background, hardware setup, and software architecture is available in the **[Project Wiki](https://github.com/wcm3415a/uwb-vital-signs-radar/wiki)**:
+* 📖 **[Hardware Architecture and Test Bench](https://github.com/wcm3415a/uwb-vital-signs-radar/wiki/Hardware-and-Test-Bench):** Details on the bistatic configuration and the 3D-printed electromagnetic shield.
+* 📖 **[Firmware and SPI Communication](https://github.com/wcm3415a/uwb-vital-signs-radar/wiki/Firmware-and-SPI):** C++ implementation, register modifications, and SPI throttling.
+* 📖 **[DSP Theory and VMD Algorithm](https://github.com/wcm3415a/uwb-vital-signs-radar/wiki/Signal-Processing):** Mathematical foundations of phase extraction and Variational Mode Decomposition.
+* 📖 **[Real-Time Python Application](https://github.com/wcm3415a/uwb-vital-signs-radar/wiki/Python-Application):** Multithreaded architecture for high-speed serial parsing and real-time visualization.
 
 ## 🛠️ System Architecture
-* **Firmware (C++):** A custom low-level firmware developed via PlatformIO bypasses the factory localization features. The transmitter operates at 64 MHz PRF (Channel 5), while the receiver continuously extracts the CIR. SPI communication is throttled to 1 MHz to prevent data corruption[cite: 1].
-* **Hardware Mitigation:** A custom 3D-printed shield lined with aluminum prevents receiver saturation caused by direct antenna coupling[cite: 1].
-* **Software Pipeline (Python):** An asynchronous multithreaded application parses the 460,800-baud serial stream. It applies an Exponential Moving Average for radar clutter removal, extracts the complex phase (`arctan(Q/I)`), and uses Variational Mode Decomposition (VMD) to isolate physiological frequencies[cite: 1].
+* **Firmware (C++):** A custom low-level firmware developed via PlatformIO bypasses the factory localization features. The transmitter operates at 64 MHz PRF (Channel 5), while the receiver continuously extracts the CIR. SPI communication is throttled to 1 MHz to prevent data corruption.
+* **Hardware Mitigation:** A custom 3D-printed shield lined with aluminum prevents receiver saturation caused by direct antenna coupling.
+* **Software Pipeline (Python):** An asynchronous multithreaded application parses the 460,800-baud serial stream. It applies an Exponential Moving Average for radar clutter removal, extracts the complex phase (`arctan(Q/I)`), and uses Variational Mode Decomposition (VMD) to isolate physiological frequencies.
 
 ## 📊 Experimental Results and Hardware Limitations
-The software processing chain was successfully validated on the MobiVital reference dataset, achieving a respiratory rate estimation error of less than 8%[cite: 1]. However, real-world testing on the physical prototype revealed strict hardware limitations[cite: 1]:
+The software processing chain was successfully validated on the MobiVital reference dataset, achieving a respiratory rate estimation error of less than 8%. However, real-world testing on the physical prototype revealed strict hardware limitations:
 
-* **Respiration Extraction:** The system successfully extracts the respiratory signal, allowing the distinction between inspiration and expiration cycles[cite: 1]. However, the measurement is affected by a permanent residual noise that cannot be fully compensated by software, occasionally falsifying parts of the obtained results[cite: 1].
-* **Heart Rate Extraction (Failed):** Heartbeat extraction failed due to absolute physical limitations[cite: 1]. The lack of strict hardware clock synchronization between the two asynchronous boards induces a phase noise (Jitter)[cite: 1]. This electronic drift completely masks the sub-millimeter cardiac displacement, rendering it unexploitable[cite: 1]. Future iterations will strictly require hard-wired clock synchronization[cite: 1].
+* **Respiration Extraction:** The system successfully extracts the respiratory signal, allowing the distinction between inspiration and expiration cycles. However, the measurement is affected by a permanent residual noise that cannot be fully compensated by software, occasionally falsifying parts of the obtained results.
+* **Heart Rate Extraction (Failed):** Heartbeat extraction failed due to absolute physical limitations. The lack of strict hardware clock synchronization between the two asynchronous boards induces a phase noise (Jitter). This electronic drift completely masks the sub-millimeter cardiac displacement, rendering it unexploitable. Future iterations will strictly require hard-wired clock synchronization.
 
 ## 📁 Repository Structure
 ```text
