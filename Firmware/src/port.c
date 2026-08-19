@@ -1,165 +1,97 @@
-#include <Arduino.h>
 #include "deca_device_api.h"
-#include "deca_regs.h"
- 
-// --- RADAR ROLE TOGGLE ---
-bool is_tx_module = false; 
-#define PIN_SW2 2          
+#include "nrf.h" // nRF52 CMSIS library
 
-extern "C" void port_init(void);
+// Internal wiring definitions for the DWM1001 between the nRF52 and the DW1000
+#define SPI_SCK_PIN  16
+#define SPI_CS_PIN   17
+#define SPI_MISO_PIN 18
+#define SPI_MOSI_PIN 20
 
-// --- UWB RADIO CONFIGURATION (Radar Special) ---
-static dwt_config_t config = {
-    5,               // chan           : Radio channel (Channel 5 = 6.5 GHz)
-    DWT_PRF_64M,     // prf            : Pulse Repetition Frequency (64 MHz)
-    DWT_PLEN_128,    // txPreambLength : Preamble length (128 symbols)
-    DWT_PAC8,        // rxPAC          : Preamble Acquisition Chunk 
-    9,               // txCode         : TX preamble code 
-    9,               // rxCode         : RX preamble code 
-    0,               // nsSFD          : Non-standard SFD 
-    DWT_BR_6M8,      // dataRate       : Data rate (6.8 Mbps) 
-    DWT_PHRMODE_STD, // phrMode        : PHY header mode 
-    (129 + 8 - 8)    // sfdTO          : SFD Timeout 
-};
+// Hardware initialization function (to be called once in your main.c)
+void port_init(void) {
+    // 1. Configure the CS (Chip Select) pin as output, set it high by default
+    NRF_P0->OUTSET = (1 << SPI_CS_PIN);
+    NRF_P0->PIN_CNF[SPI_CS_PIN] = 3; // Direction: Output
 
-void setup() {
-    Serial.begin(460800); 
-    
-    // 1. THE DEFIBRILLATOR (DEEP SLEEP WAKE-UP) 
-    pinMode(17, OUTPUT);
-    digitalWrite(17, LOW);  
-    delay(5);               
-    digitalWrite(17, HIGH); 
-    delay(10);              
-    
-    // 2. HARDWARE RESET (Pin 24)
-    pinMode(24, OUTPUT);
-    digitalWrite(24, LOW);  
-    delay(10);
-    pinMode(24, INPUT);     
-    delay(50);              
+    // 2. Configure the SPI pins
+    NRF_P0->PIN_CNF[SPI_SCK_PIN]  = 3; // Output
+    NRF_P0->PIN_CNF[SPI_MOSI_PIN] = 3; // Output
+    NRF_P0->PIN_CNF[SPI_MISO_PIN] = 0; // Input
 
-    // 3. SPI BUS OPENING 
-    port_init();
-    
-    // 🚨 4. FORCED PATCH: CAPPING SPI SPEED TO 1 MHz 🚨
-    #ifdef NRF_SPI2
-        NRF_SPI2->FREQUENCY = 0x01000000;
-        NRF_SPI2->CONFIG = 0;
-    #endif
-    #ifdef NRF_SPIM2
-        NRF_SPIM2->FREQUENCY = 0x01000000;
-        NRF_SPIM2->CONFIG = 0;
-    #endif
-    #ifdef NRF_SPI1
-        NRF_SPI1->FREQUENCY = 0x01000000;
-        NRF_SPI1->CONFIG = 0;
-    #endif
-    #ifdef NRF_SPIM1
-        NRF_SPIM1->FREQUENCY = 0x01000000;
-        NRF_SPIM1->CONFIG = 0;
-    #endif
-    
-    // 5. DW1000 software initialization
-    dwt_softreset();
-    
-    if (dwt_initialise(DWT_LOADUCODE) != DWT_SUCCESS) {
-        while (1) {
-            Serial.println("❌ CRITICAL ERROR: The DW1000 chip is not responding on the SPI bus!");
-            delay(1000);
-        }
-    }
-    
-    dwt_configure(&config);
-    dwt_setrxantennadelay(16436);
+    // 3. Connect these pins to the nRF52 SPI2 peripheral
+    NRF_SPI2->PSELSCK  = SPI_SCK_PIN;
+    NRF_SPI2->PSELMOSI = SPI_MOSI_PIN;
+    NRF_SPI2->PSELMISO = SPI_MISO_PIN;
 
-    // --- READING SW2 BUTTON ---
-    NRF_P0->PIN_CNF[2] = (3 << 2); 
-    delay(10); 
-
-    if ((NRF_P0->IN & (1 << 2)) == 0) {
-        is_tx_module = true; 
-    } else {
-        is_tx_module = false;
-    }
-
-    // --- TURNING ON LEDS ---
-    NRF_P0->DIRSET = (1 << 14) | (1 << 30);
-    NRF_P0->OUTSET = (1 << 14) | (1 << 30);
-
-    if (is_tx_module) {
-        Serial.println("Initialising the TX (20 Hz transmitter)...");
-        NRF_P0->OUTCLR = (1 << 14); // Turn on Green LED (D9)
-    } else {
-        Serial.println("Initialising the RX (Radar Recieve)...");
-        NRF_P0->OUTCLR = (1 << 30); // Turn on Blue LED (D10)
-    }
+    // 4. Configure SPI speed (8 Mbps for fast CIR extraction)
+    NRF_SPI2->FREQUENCY = 0x80000000; 
+    NRF_SPI2->CONFIG = 0; // Mode 0: CPOL=0, CPHA=0, MSB first
+    NRF_SPI2->ENABLE = 1; // Enable the SPI bus
 }
 
-void loop() {
-    if (is_tx_module) {
-        // --- TX LOGIC ---
-        uint8_t tx_msg[] = {'R', 'A', 'D', 'A', 'R', 0, 0}; 
+// ---------------------------------------------------------------------------
+// FUNCTIONS REQUIRED BY THE DECAWAVE DRIVER (deca_device_api.h)
+// ---------------------------------------------------------------------------
 
-        dwt_writetxdata(sizeof(tx_msg), tx_msg, 0);
-        dwt_writetxfctrl(sizeof(tx_msg), 0, 0);
-        dwt_starttx(DWT_START_TX_IMMEDIATE);
+int writetospi(uint16 headerLength, const uint8 *headerBuffer, uint32 bodyLength, const uint8 *bodyBuffer) {
+    NRF_P0->OUTCLR = (1 << SPI_CS_PIN); // Pull CS low (Begin communication)
 
-        // 🚨 VITAL FIX: Waiting and clearing the flag to prevent TX lockup 🚨
-        while (!(dwt_read32bitreg(SYS_STATUS_ID) & SYS_STATUS_TXFRS)) {
-            // Very short wait for the physical transmission
-        }
-        dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS); // Unlocks the next shot
-
-        // Wait for 50 milliseconds (20 Hz)
-        delay(50); 
-
-    } else {
-        // --- RX LOGIC ---
-        dwt_rxenable(DWT_START_RX_IMMEDIATE);
-
-        uint32_t status_reg = 0;
-        while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG | SYS_STATUS_ALL_RX_ERR))) {
-            // Waiting for the wave...
-        }
-
-        if (status_reg & SYS_STATUS_RXFCG) {
-            
-            // 1. Read the exact index where the wave hit (First Path)
-            uint16_t fp_index = dwt_read16bitoffsetreg(RX_TIME_ID, RX_TIME_FP_INDEX_OFFSET);
-            uint16_t fp_int = fp_index >> 6; // Convert raw index to integer
-
-            // 2. Step back 10 samples to see the silence right BEFORE the impact
-            int16_t start_index = fp_int - 10;
-            if (start_index < 0) {
-                start_index = 0; 
-            }
-
-            // 3. Convert this index to bytes (1 sample = 4 bytes)
-            uint16_t byte_offset = start_index * 4;
-
-            // 4. Anti-crash security: prevent reading out of memory bounds (max 4064)
-            if (byte_offset > 3000) {
-                byte_offset = 3000; 
-            }
-
-            // 5. Clear the flag
-            dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG);
-
-            // 6. Read the accumulator with the CORRECT OFFSET
-            uint16_t cir_bytes = 1024; 
-            uint8_t cir_buffer[cir_bytes + 1]; 
-
-            // 🚨 PUT OUR OFFSET HERE INSTEAD OF ZERO 🚨
-            dwt_readaccdata(cir_buffer, cir_bytes + 1, byte_offset);
-
-            // Send to Mac
-            uint8_t header[] = {0xDE, 0xCA, 0xAD, 0xDE}; 
-            Serial.write(header, 4);
-            Serial.write(&cir_buffer[1], cir_bytes);
-
-        } else {
-            dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_ERR);
-        }
+    // Write the header
+    for(int i = 0; i < headerLength; i++) {
+        NRF_SPI2->TXD = headerBuffer[i];
+        while(NRF_SPI2->EVENTS_READY == 0); // Wait for transmission to complete
+        NRF_SPI2->EVENTS_READY = 0;
+        (void)NRF_SPI2->RXD; // Clear the reception buffer
     }
+
+    // Write the data payload
+    for(int i = 0; i < bodyLength; i++) {
+        NRF_SPI2->TXD = bodyBuffer[i];
+        while(NRF_SPI2->EVENTS_READY == 0);
+        NRF_SPI2->EVENTS_READY = 0;
+        (void)NRF_SPI2->RXD;
+    }
+
+    NRF_P0->OUTSET = (1 << SPI_CS_PIN); // Pull CS high (End of communication)
+    return 0; // DWT_SUCCESS
+}
+
+int readfromspi(uint16 headerLength, const uint8 *headerBuffer, uint32 readlength, uint8 *readBuffer) {
+    NRF_P0->OUTCLR = (1 << SPI_CS_PIN); // Pull CS low
+
+    // Write the header (Target memory address)
+    for(int i = 0; i < headerLength; i++) {
+        NRF_SPI2->TXD = headerBuffer[i];
+        while(NRF_SPI2->EVENTS_READY == 0);
+        NRF_SPI2->EVENTS_READY = 0;
+        (void)NRF_SPI2->RXD; 
+    }
+
+    // Read data (Send dummy bytes 0x00 to clock in the response from the chip)
+    for(int i = 0; i < readlength; i++) {
+        NRF_SPI2->TXD = 0x00; 
+        while(NRF_SPI2->EVENTS_READY == 0);
+        NRF_SPI2->EVENTS_READY = 0;
+        readBuffer[i] = NRF_SPI2->RXD; // Store the received byte
+    }
+
+    NRF_P0->OUTSET = (1 << SPI_CS_PIN); // Pull CS high
+    return 0; // DWT_SUCCESS
+}
+
+// Disable interrupts (to prevent disruption of time-critical radio operations)
+decaIrqStatus_t decamutexon(void) {
+    __disable_irq(); // Native CMSIS function to disable global interrupts
+    return 0;
+}
+
+// Restore interrupts
+void decamutexoff(decaIrqStatus_t s) {
+    __enable_irq();
+}
+
+// Blocking delay function required by the Decawave driver
+void deca_sleep(unsigned int time_ms) {
+    // Simple blocking delay loop (Processor runs at 64 MHz)
+    for(volatile int i = 0; i < (16000 * time_ms); i++);
 }
