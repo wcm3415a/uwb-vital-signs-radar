@@ -32,10 +32,11 @@ The software processing chain was successfully validated on the [MobiVital](http
 ├── Firmware/                 # C++ PlatformIO project for TX/RX modules
 │   ├── src/main.cpp          # Core radar logic and SPI extraction
 │   └── lib/                  # DW1000 low-level API headers
-├── Software/                 # Python real-time acquisition and DSP pipeline
-│   ├── serial_reader.py      # Multithreaded acquisition thread
-│   ├── dsp_pipeline.py       # VMD, Clutter removal, and Phase extraction
-│   └── main_gui.py           # Real-time visualization interface
+├── Software/                 # Python DSP pipeline and analysis scripts
+│   ├── analysis_breath_DB.py # Respiratory extraction on MobiVital reference dataset
+│   ├── analysis_breath_RT.py # Real-time respiratory extraction from serial UWB stream
+│   ├── analysis_puls_DB.py   # Heart rate extraction tests on reference dataset
+│   └── fonction_RPM.py       # Core DSP functions (VMD, Phase extraction, EMA filters)
 ├── Hardware/                 # 3D models (STL/Fusion 360) for the RF shield
 └── Docs/                     # Additional documentation and test data
 ```
